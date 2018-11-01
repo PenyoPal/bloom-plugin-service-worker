@@ -1,4 +1,4 @@
-let self = {
+self = {
   skipWaiting: function() {},
   clients: {claim: function() {}},
   handlers: {},
@@ -7,11 +7,13 @@ let self = {
   }
 };
 
-let caches = {
-  open: function(name) {
+cache = {match: null, add: null, put: null};
 
+caches = {
+  open: function(_name) {
+      return new Promise(function(resolve, reject) { resolve(cache); });
   },
   match: function(request) {
-
+      return cache.match(request);
   }
 };
