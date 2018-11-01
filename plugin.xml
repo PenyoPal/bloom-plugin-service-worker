@@ -28,8 +28,7 @@
         </config-file>
         <header-file src="src/ios/CDVServiceWorker.h" />
         <source-file src="src/ios/CDVServiceWorker.m" />
-        <header-file src="src/ios/ServiceWorkerContext.h" />
-        <source-file src="src/ios/ServiceWorkerContext.m" />
+        <resource-file src="src/ios/service_worker_shim.js" target="service_worker_shim.js" />
         <framework src="JavaScriptCore.framework" />
     </platform>
 
