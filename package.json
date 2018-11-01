@@ -1,0 +1,29 @@
+{
+  "name": "bloom-plugin-service-worker",
+  "version": "0.0.1",
+  "description": "Service Worker Plugin",
+  "cordova": {
+    "id": "bloom-plugin-service-worker",
+    "platforms": [
+      "ios"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://gitlab.com/penyopal/bloom-plugin-service-worker"
+  },
+  "keywords": [
+    "cordova",
+    "serviceworker",
+    "service",
+    "worker",
+    "ecosystem:cordova",
+    "cordova-ios"
+  ],
+  "author": "Bloom Ventures",
+  "license": "Apache 2.0",
+  "bugs": {
+    "url": "https://gitlab.com/penyopal/bloom-plugin-service-worker/issues"
+  },
+  "homepage": "https://gitlab.com/penyopal/bloom-plugin-service-worker"
+}
