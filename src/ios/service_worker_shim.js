@@ -3,7 +3,7 @@ let self = {
   clients: {claim: function() {}},
   handlers: {},
   addEventListener: function(eventName, fn) {
-    handlers[eventName] = fn;
+    this.handlers[eventName] = fn;
   }
 };
 
