@@ -12,25 +12,23 @@
 - (void)prepareJavascriptContext
 {
   self.jsContext = [[JSContext alloc] init];
-  self.swContext = [[ServiceWorkerContext alloc] init]
-    self.jsContext[@"self"] = self.swContext;
 }
 
 #pragma mark - Methods called from javascript client
 
 - (void)register:(CDVInvokedUrlCommand*)command
 {
-
+  NSLog(@"Registering Service worker");
 }
 
 - (void)serviceWorkerReady:(CDVInvokedUrlCommand*)command
 {
-
+  NSLog(@"Service worker ready");
 }
 
 - (void)postMessage:(CDVInvokedUrlCommand*)command
 {
-
+  NSLog(@"Posting message");
 }
 
 @end
