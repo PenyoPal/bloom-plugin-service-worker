@@ -21,8 +21,12 @@
 
 #pragma mark - Caching stuff
 
-- (NSData*)requestFromCache:(id)request {
-    return nil;
+- (JSValue*)requestFromCache:(id)request {
+    return [JSValue valueWithUndefinedInContext:self.jsContext];
+}
+
+- (JSValue*)performFetch:(id)request {
+    return [JSValue valueWithUndefinedInContext:self.jsContext];
 }
 
 #pragma mark - "Service Worker" context
@@ -41,14 +45,10 @@ typedef void(^JSPromiseCallback)(JSValue *resolve, JSValue *reject);
         NSLog(@"SW: CHECKING FOR MATCH WITH %@", requestOrURL);
         JSValue* promiseClass = self.jsContext[@"Promise"];
         JSPromiseCallback cb = ^(JSValue* resolve, JSValue *reject) {
-            NSData *resp = [self requestFromCache:requestOrURL];
-            id arg;
-            if (resp == nil) {
-                arg = [NSNull null];
-            } else {
-                arg = resp;
-            }
-            [resolve callWithArguments:@[arg]];
+            [self.commandDelegate runInBackground:^{
+                JSValue *resp = [self requestFromCache:requestOrURL];
+                [resolve callWithArguments:@[resp]];
+            }];
         };
         JSValue *respPromise = [promiseClass constructWithArguments:@[cb]];
         return respPromise;
