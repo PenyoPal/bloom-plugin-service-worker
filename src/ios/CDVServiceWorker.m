@@ -143,14 +143,22 @@ typedef void(^JSCallback)(JSValue* val);
 - (void)postMessage:(CDVInvokedUrlCommand*)command
 {
     NSLog(@"Posting message");
-    // TODO: have ports array replaced with some sort of identifier,
-    // put corresponding objects int he array with a `postMessage`
-    // method that will let us keep track of what was posted, then
-    // return that to the invoked command, so it can handle it on that
-    // side
     [self.commandDelegate runInBackground:^{
+        NSArray<NSNumber*>* portHandles = [command argumentAtIndex:1];
+
+        NSMutableArray* handlers = [@[] mutableCopy];
+        for (NSNumber *handle in portHandles) {
+            [handlers addObject:@{@"postMessage": ^(NSString *msg) {
+                [self.commandDelegate
+                 sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK
+                                                messageAsDictionary:@{@"port": handle,
+                                                                      @"msg": msg}]
+                 callbackId:command.callbackId];
+            }}];
+        }
+
         NSDictionary *event = @{@"data": [command argumentAtIndex:0],
-                                @"ports": [command argumentAtIndex:1]};
+                                @"ports": handlers};
 
         JSValue* messageHandler = self.jsContext[@"self"][@"handlers"][@"message"];
 
