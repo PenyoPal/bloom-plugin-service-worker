@@ -5,6 +5,8 @@
 @property (nonatomic,strong) dispatch_semaphore_t workerReadySemaphore;
 @property (nonatomic,strong) NSString *scriptUrl;
 @property (nonatomic,strong) NSString *scope;
+@property (nonatomic,strong) NSMutableDictionary<NSDictionary*, NSDictionary*>* cache;
+@property (nonatomic,strong) NSURL *rootURL;
 
 @end
 
@@ -13,23 +15,13 @@
 - (void)pluginInitialize
 {
     NSLog(@"Initing service worker plugin");
+    self.rootURL = [NSURL URLWithString:self.commandDelegate.settings[@"remoteserverurl"]];
     self.workerReadySemaphore = dispatch_semaphore_create(0);
     [self prepareJavascriptContext];
+    self.cache = [[NSMutableDictionary alloc] init];
 }
 
-#pragma mark - Caching stuff
-
-- (JSValue*)requestFromCache:(JSValue*)requestOrURL {
-    return [JSValue valueWithUndefinedInContext:self.jsContext];
-}
-
-- (JSValue*)performFetch:(JSValue*)request {
-    return [self wrapInPromise:^(JSCallback onResolve, JSCallback onReject) {
-        onReject([JSValue valueWithUndefinedInContext:self.jsContext]);
-    }];
-}
-
-#pragma mark - "Service Worker" context
+#pragma mark - Helpers
 
 typedef void(^JSPromiseCallback)(JSValue *resolve, JSValue *reject);
 
@@ -51,6 +43,87 @@ typedef void(^JSCallback)(JSValue* val);
     JSValue *respPromise = [promiseClass constructWithArguments:@[cb]];
     return respPromise;
 }
+
+- (NSURLRequest*)requestFromJSValue:(JSValue*)requestOrURL {
+    if ([requestOrURL isString]) {
+        NSURL *url = [NSURL URLWithString:[requestOrURL toString] relativeToURL:self.rootURL];
+        return [NSURLRequest requestWithURL:url];
+    } else {
+        NSMutableURLRequest* req = [[NSMutableURLRequest alloc] init];
+        req.URL = [NSURL URLWithString:requestOrURL[@"url"].toString];
+        if (![requestOrURL[@"method"] isUndefined]) {
+            req.HTTPMethod = requestOrURL[@"method"].toString;
+        } else {
+            req.HTTPMethod = @"GET";
+        }
+        if (![requestOrURL[@"headers"] isUndefined]) {
+            NSDictionary *headers = requestOrURL[@"headers"].toDictionary;
+            for (NSString* key in headers) {
+                [req setValue:headers[key] forHTTPHeaderField:key];
+            }
+        }
+        if (![requestOrURL[@"body"] isUndefined]) {
+            NSData *body = [requestOrURL[@"body"].toString dataUsingEncoding:NSUTF8StringEncoding];
+            req.HTTPBody = body;
+        }
+        return req;
+    }
+}
+
+- (NSDictionary*)dictFromRequest:(NSURLRequest*)request {
+    if (request == nil) { return nil; }
+    // TODO: include body in the request as well?
+    NSDictionary* headers = request.allHTTPHeaderFields;
+    return @{@"url": request.URL.standardizedURL,
+             @"method": request.HTTPMethod,
+             @"headers": headers ? headers : [NSNull null]};
+}
+
+#pragma mark - Caching stuff
+
+- (JSValue*)requestFromCache:(JSValue*)requestOrURL {
+    NSLog(@"Looking up cache for %@", requestOrURL);
+    NSDictionary* req = [self dictFromRequest:[self requestFromJSValue:requestOrURL]];
+    NSDictionary *resp;
+    if (req != nil && (resp = self.cache[req]) != nil) {
+        return [JSValue valueWithObject:resp inContext:self.jsContext];
+    } else {
+        return [JSValue valueWithUndefinedInContext:self.jsContext];
+    }
+}
+
+- (void)setCacheResponse:(JSValue*)response forRequest:(JSValue*)requestOrURL
+{
+    NSDictionary* req = [self dictFromRequest:[self requestFromJSValue:requestOrURL]];
+    NSDictionary* resp = response.toDictionary;
+    self.cache[req] = resp;
+}
+
+- (JSValue*)performFetch:(JSValue*)request {
+    return [self wrapInPromise:^(JSCallback onResolve, JSCallback onReject) {
+        NSURLRequest *req = [self requestFromJSValue:request];
+        NSURLSessionTask *fetchTask =
+        [[NSURLSession sharedSession]
+         dataTaskWithRequest:req
+         completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
+             if (error != nil) {
+                 NSLog(@"Error running fetch for %@: %@", req, error.localizedDescription);
+                 onReject([JSValue valueWithObject:error.localizedDescription inContext:self.jsContext]);
+                 return;
+             }
+
+             NSHTTPURLResponse* httpResponse = (NSHTTPURLResponse*)response;
+             NSDictionary *jsResp = @{@"headers": httpResponse.allHeaderFields,
+                                      @"status": @(httpResponse.statusCode),
+                                      @"body": [data base64EncodedStringWithOptions:0]};
+             onResolve([JSValue valueWithObject:jsResp inContext:self.jsContext]);
+         }];
+        [fetchTask resume];
+    }];
+}
+
+#pragma mark - "Service Worker" context
+
 
 - (void)prepareJavascriptContext
 {
@@ -78,8 +151,9 @@ typedef void(^JSCallback)(JSValue* val);
         }];
     };
 
-    self.jsContext[@"cache"][@"put"] = ^(id requestOrURL, id response) {
+    self.jsContext[@"cache"][@"put"] = ^(JSValue* requestOrURL, JSValue* response) {
         NSLog(@"SW: PUTTING %@ for %@", response, requestOrURL);
+        [self setCacheResponse:response forRequest:requestOrURL];
     };
 
     self.jsContext[@"cache"][@"add"] = ^(JSValue* requestOrURL){
