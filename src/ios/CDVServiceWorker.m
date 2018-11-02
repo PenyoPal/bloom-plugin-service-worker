@@ -41,18 +41,24 @@ typedef void(^JSPromiseCallback)(JSValue *resolve, JSValue *reject);
                                                     encoding:NSUTF8StringEncoding
                                                        error:nil];
     [self.jsContext evaluateScript:shimScript];
-    self.jsContext[@"cache"][@"match"] = ^(id requestOrURL){
+
+    self.jsContext[@"fetch"] = ^(JSValue *request) {
+        // TODO
+    };
+
+    self.jsContext[@"cache"][@"match"] = ^(id requestOrURL) {
         NSLog(@"SW: CHECKING FOR MATCH WITH %@", requestOrURL);
-        JSValue* promiseClass = self.jsContext[@"Promise"];
-        JSPromiseCallback cb = ^(JSValue* resolve, JSValue *reject) {
+        JSValue *promiseClass = self.jsContext[@"Promise"];
+        JSPromiseCallback cb = ^(JSValue *resolve, JSValue *reject) {
             [self.commandDelegate runInBackground:^{
                 JSValue *resp = [self requestFromCache:requestOrURL];
-                [resolve callWithArguments:@[resp]];
+                [resolve callWithArguments:@[ resp ]];
             }];
         };
-        JSValue *respPromise = [promiseClass constructWithArguments:@[cb]];
+        JSValue *respPromise = [promiseClass constructWithArguments:@[ cb ]];
         return respPromise;
     };
+
     self.jsContext[@"cache"][@"add"] = ^(id requestOrURL){
         NSLog(@"SW: ADDING request %@", requestOrURL);
     };
@@ -114,6 +120,11 @@ typedef void(^JSPromiseCallback)(JSValue *resolve, JSValue *reject);
 - (void)postMessage:(CDVInvokedUrlCommand*)command
 {
     NSLog(@"Posting message");
+    // TODO: have ports array replaced with some sort of identifier,
+    // put corresponding objects int he array with a `postMessage`
+    // method that will let us keep track of what was posted, then
+    // return that to the invoked command, so it can handle it on that
+    // side
     [self.commandDelegate runInBackground:^{
         NSDictionary *event = @{@"data": [command argumentAtIndex:0],
                                 @"ports": [command argumentAtIndex:1]};
