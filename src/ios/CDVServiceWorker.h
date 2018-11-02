@@ -1,6 +1,6 @@
 /* -*- mode: objc -*- */
 #import <Cordova/CDVPlugin.h>
-@import JavascriptCore;
+@import JavaScriptCore;
 
 @interface CDVServiceWorker: CDVPlugin
 
