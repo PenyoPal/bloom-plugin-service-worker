@@ -23,8 +23,10 @@
     return [JSValue valueWithUndefinedInContext:self.jsContext];
 }
 
-- (JSValue*)performFetch:(id)request {
-    return [JSValue valueWithUndefinedInContext:self.jsContext];
+- (JSValue*)performFetch:(JSValue*)request {
+    return [self wrapInPromise:^(JSCallback onResolve, JSCallback onReject) {
+        onReject([JSValue valueWithUndefinedInContext:self.jsContext]);
+    }];
 }
 
 #pragma mark - "Service Worker" context
@@ -42,7 +44,9 @@ typedef void(^JSCallback)(JSValue* val);
         JSCallback onReject = ^(JSValue *val) {
             [rejectVal callWithArguments:@[val]];
         };
-        block(onResolve, onReject);
+        [self.commandDelegate runInBackground:^{
+            block(onResolve, onReject);
+        }];
     };
     JSValue *respPromise = [promiseClass constructWithArguments:@[cb]];
     return respPromise;
@@ -56,25 +60,34 @@ typedef void(^JSCallback)(JSValue* val);
                                                     encoding:NSUTF8StringEncoding
                                                        error:nil];
     [self.jsContext evaluateScript:shimScript];
+
+    __weak CDVServiceWorker* welf = self;
+
     self.jsContext[@"fetch"] = ^(JSValue *request) {
-        // TODO
-    };
-    self.jsContext[@"cache"][@"match"] = ^(JSValue* requestOrURL){
-        NSLog(@"SW: CHECKING FOR MATCH WITH %@", requestOrURL);
-        return [self wrapInPromise:^(JSCallback onResolve, JSCallback onReject) {
-            [self.commandDelegate runInBackground:^{
-                JSValue *resp = [self requestFromCache:requestOrURL];
-                onResolve(resp);
-            }];
+        NSLog(@"Fetching %@", request);
+        return [welf wrapInPromise:^(JSCallback onResolve, JSCallback onReject) {
+            onReject([JSValue valueWithUndefinedInContext:welf.jsContext]);
         }];
     };
 
-    self.jsContext[@"cache"][@"add"] = ^(id requestOrURL){
-        NSLog(@"SW: ADDING request %@", requestOrURL);
+    self.jsContext[@"cache"][@"match"] = ^(JSValue* requestOrURL){
+        NSLog(@"SW: CHECKING FOR MATCH WITH %@", requestOrURL);
+        return [welf wrapInPromise:^(JSCallback onResolve, JSCallback onReject) {
+            JSValue *resp = [welf requestFromCache:requestOrURL];
+            onResolve(resp);
+        }];
     };
+
     self.jsContext[@"cache"][@"put"] = ^(id requestOrURL, id response) {
         NSLog(@"SW: PUTTING %@ for %@", response, requestOrURL);
     };
+
+    self.jsContext[@"cache"][@"add"] = ^(JSValue* requestOrURL){
+        NSLog(@"SW: ADDING request %@", requestOrURL);
+        JSValue *fetchPromise = [welf performFetch:requestOrURL];
+        return [fetchPromise invokeMethod:@"then" withArguments:@[self.jsContext[@"cache"][@"put"]]];
+    };
+
 }
 
 #pragma mark - Methods called from javascript client
