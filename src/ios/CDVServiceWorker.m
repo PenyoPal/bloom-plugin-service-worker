@@ -56,6 +56,9 @@ typedef void(^JSCallback)(JSValue* val);
                                                     encoding:NSUTF8StringEncoding
                                                        error:nil];
     [self.jsContext evaluateScript:shimScript];
+    self.jsContext[@"fetch"] = ^(JSValue *request) {
+        // TODO
+    };
     self.jsContext[@"cache"][@"match"] = ^(JSValue* requestOrURL){
         NSLog(@"SW: CHECKING FOR MATCH WITH %@", requestOrURL);
         return [self wrapInPromise:^(JSCallback onResolve, JSCallback onReject) {
@@ -65,6 +68,7 @@ typedef void(^JSCallback)(JSValue* val);
             }];
         }];
     };
+
     self.jsContext[@"cache"][@"add"] = ^(id requestOrURL){
         NSLog(@"SW: ADDING request %@", requestOrURL);
     };
@@ -126,6 +130,11 @@ typedef void(^JSCallback)(JSValue* val);
 - (void)postMessage:(CDVInvokedUrlCommand*)command
 {
     NSLog(@"Posting message");
+    // TODO: have ports array replaced with some sort of identifier,
+    // put corresponding objects int he array with a `postMessage`
+    // method that will let us keep track of what was posted, then
+    // return that to the invoked command, so it can handle it on that
+    // side
     [self.commandDelegate runInBackground:^{
         NSDictionary *event = @{@"data": [command argumentAtIndex:0],
                                 @"ports": [command argumentAtIndex:1]};
