@@ -2,7 +2,6 @@
 
 @interface CDVServiceWorker ()
 
-@property (nonatomic,strong) NSOperationQueue *queue;
 @property (nonatomic,strong) dispatch_semaphore_t workerReadySemaphore;
 @property (nonatomic,strong) NSString *scriptUrl;
 @property (nonatomic,strong) NSString *scope;
@@ -15,7 +14,6 @@
 {
     NSLog(@"Initing service worker plugin");
     self.workerReadySemaphore = dispatch_semaphore_create(0);
-    self.queue = [[NSOperationQueue alloc] init];
     [self prepareJavascriptContext];
 }
 
