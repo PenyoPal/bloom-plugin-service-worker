@@ -19,7 +19,7 @@
 
 #pragma mark - Caching stuff
 
-- (JSValue*)requestFromCache:(id)request {
+- (JSValue*)requestFromCache:(JSValue*)requestOrURL {
     return [JSValue valueWithUndefinedInContext:self.jsContext];
 }
 
@@ -31,6 +31,23 @@
 
 typedef void(^JSPromiseCallback)(JSValue *resolve, JSValue *reject);
 
+typedef void(^JSCallback)(JSValue* val);
+
+- (JSValue*)wrapInPromise:(void (^)(JSCallback onResolve, JSCallback onReject))block {
+    JSValue* promiseClass = self.jsContext[@"Promise"];
+    JSPromiseCallback cb = ^(JSValue* resolveVal, JSValue *rejectVal) {
+        JSCallback onResolve = ^(JSValue *val) {
+            [resolveVal callWithArguments:@[val]];
+        };
+        JSCallback onReject = ^(JSValue *val) {
+            [rejectVal callWithArguments:@[val]];
+        };
+        block(onResolve, onReject);
+    };
+    JSValue *respPromise = [promiseClass constructWithArguments:@[cb]];
+    return respPromise;
+}
+
 - (void)prepareJavascriptContext
 {
     self.jsContext = [[JSContext alloc] init];
@@ -39,17 +56,14 @@ typedef void(^JSPromiseCallback)(JSValue *resolve, JSValue *reject);
                                                     encoding:NSUTF8StringEncoding
                                                        error:nil];
     [self.jsContext evaluateScript:shimScript];
-    self.jsContext[@"cache"][@"match"] = ^(id requestOrURL){
+    self.jsContext[@"cache"][@"match"] = ^(JSValue* requestOrURL){
         NSLog(@"SW: CHECKING FOR MATCH WITH %@", requestOrURL);
-        JSValue* promiseClass = self.jsContext[@"Promise"];
-        JSPromiseCallback cb = ^(JSValue* resolve, JSValue *reject) {
+        return [self wrapInPromise:^(JSCallback onResolve, JSCallback onReject) {
             [self.commandDelegate runInBackground:^{
                 JSValue *resp = [self requestFromCache:requestOrURL];
-                [resolve callWithArguments:@[resp]];
+                onResolve(resp);
             }];
-        };
-        JSValue *respPromise = [promiseClass constructWithArguments:@[cb]];
-        return respPromise;
+        }];
     };
     self.jsContext[@"cache"][@"add"] = ^(id requestOrURL){
         NSLog(@"SW: ADDING request %@", requestOrURL);
