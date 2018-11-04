@@ -225,9 +225,7 @@ typedef void(^JSCallback)(JSValue* val);
 
     self.jsContext[@"fetch"] = ^(JSValue *request) {
         NSLog(@"Fetching %@", request);
-        return [welf wrapInPromise:^(JSCallback onResolve, JSCallback onReject) {
-            onReject([JSValue valueWithUndefinedInContext:welf.jsContext]);
-        }];
+        return [welf performFetch:request];
     };
 
     self.jsContext[@"cache"][@"match"] = ^(JSValue* requestOrURL){
