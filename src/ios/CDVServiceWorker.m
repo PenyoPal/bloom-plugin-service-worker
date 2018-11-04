@@ -7,18 +7,82 @@
 @property (nonatomic,strong) NSString *scope;
 @property (nonatomic,strong) NSMutableDictionary<NSDictionary*, NSDictionary*>* cache;
 @property (nonatomic,strong) NSURL *rootURL;
+@property (nonatomic,strong) NSString *fetchingHeader;
 
 @end
 
 @implementation CDVServiceWorker
 
+static CDVServiceWorker *instance;
+
++ (instancetype)sharedInstance {
+    return instance;
+}
+
 - (void)pluginInitialize
 {
     NSLog(@"Initing service worker plugin");
+    self.fetchingHeader = @"fake-service-worker-request";
     self.rootURL = [NSURL URLWithString:self.commandDelegate.settings[@"remoteserverurl"]];
     self.workerReadySemaphore = dispatch_semaphore_create(0);
     [self prepareJavascriptContext];
     self.cache = [[NSMutableDictionary alloc] init];
+    instance = self;
+}
+
+#pragma mark - Interoperating with GCDServer
+
+- (BOOL)shouldHandleRequestWithHeaders:(NSDictionary*)requestHeaders
+{
+    return reqestHeaders[self.fetchingHeader] == nil &&
+            !(self.jsContext[@"self"][@"handlers"][@"fetch"].isUndefined);
+}
+
+- (void)handleFetchEvent:(id<WebRequest>)request complete:(void (^)(NSDictionary *response))complete
+{
+    JSValue* fetchHandler = self.jsContext[@"self"][@"handlers"][@"fetch"];
+    JSValue* responsePromise = nil;
+    JSValue* handlerResponse = [fetchHandler callWithArguments:
+                                                @[@{@"request": [self dictFromRequest:request],
+                                                  @"respondWith": ^(JSValue* response) { responsePromise = response; }}]];
+    if (responsePromise == nil) {
+        // handler doesn't want to deal with it
+        [self forwardRequest:request complete:complete];
+    } else {
+        [responsePromise invokeMethod:@"then" withArguments:@[^(JSValue *response) {
+                    NSDictionary *respDict = response.toDictionary;
+                    complete(@{@"headers": respDict[@"headers"],
+                                @"status": respDict[@"status"],
+                                @"body": [[NSData alloc] initWithBase64EncodedString:respDict[@"body"]
+                                                                             options:0]});
+                }]];
+    }
+}
+
+- (void)forwardRequest:(id<WebRequest>)request complete:(void (^)(NSDictionary*response))complete
+{
+    NSURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:request.URL];
+    urlRequest.HTTPMethod = request.HTTPMethod;
+    for (NSString *field in request.allHTTPHeaderFields) {
+        [urlRequest setValue:request.allHTTPHeaderFields[field] forHTTPHeaderField:field];
+    }
+    [urlRequest setValue:@"1" forHTTPHeaderField:self.fetchingHeader];
+    NSURLSessionTask *task = [[NSURLSession sharedSession]
+                                 dataTaskWithRequest:urlRequest
+                                   completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
+            if (error != nil) {
+                NSLog(@"Error forwarding request: %@", error.localizedDescription);
+                complete(@{@"status": @(500),
+                           @"headers": @{},
+                           @"body": [[NSData alloc] init]});
+                return;
+            }
+            NSHTTPURLResponse *resp = (NSHTTPURLResponse *)response;
+            complete(@{@"status": @(resp.statusCode),
+                       @"headers": resp.allHeaderFields,
+                       @"body": data});
+        }];
+    [task resume];
 }
 
 #pragma mark - Helpers
@@ -101,7 +165,8 @@ typedef void(^JSCallback)(JSValue* val);
 
 - (JSValue*)performFetch:(JSValue*)request {
     return [self wrapInPromise:^(JSCallback onResolve, JSCallback onReject) {
-        NSURLRequest *req = [self requestFromJSValue:request];
+        NSURLRequest *req = [[self requestFromJSValue:request] mutableCopy];
+        [req setValue:@"1" forHTTPHeaderField:self.fetchingHeader];
         NSURLSessionTask *fetchTask =
         [[NSURLSession sharedSession]
          dataTaskWithRequest:req
@@ -129,9 +194,11 @@ typedef void(^JSCallback)(JSValue* val);
 {
     self.jsContext = [[JSContext alloc] init];
     self.jsContext.name = @"fake Service Worker";
-    NSString *shimScript = [NSString stringWithContentsOfURL:[[NSBundle mainBundle] URLForResource:@"service_worker_shim" withExtension:@"js"]
-                                                    encoding:NSUTF8StringEncoding
-                                                       error:nil];
+    NSString *shimScript = [NSString stringWithContentsOfURL:
+                                         [[NSBundle mainBundle]
+                                             URLForResource:@"service_worker_shim" withExtension:@"js"]
+                                                   encoding:NSUTF8StringEncoding
+                                                      error:nil];
     [self.jsContext evaluateScript:shimScript];
 
     __weak CDVServiceWorker* welf = self;
@@ -159,7 +226,9 @@ typedef void(^JSCallback)(JSValue* val);
     self.jsContext[@"cache"][@"add"] = ^(JSValue* requestOrURL){
         NSLog(@"SW: ADDING request %@", requestOrURL);
         JSValue *fetchPromise = [welf performFetch:requestOrURL];
-        return [fetchPromise invokeMethod:@"then" withArguments:@[self.jsContext[@"cache"][@"put"]]];
+        return [fetchPromise invokeMethod:@"then" withArguments:@[^(JSValue *response){
+                    [self setCacheResponse:response forRequest:requestOrURL];
+                }]];
     };
 
 }
