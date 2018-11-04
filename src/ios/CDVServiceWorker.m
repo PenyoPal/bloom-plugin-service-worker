@@ -32,19 +32,32 @@ static CDVServiceWorker *instance;
 
 #pragma mark - Interoperating with GCDServer
 
+- (NSURLRequest*)toNSURLRequest:(id<WebRequest>)request
+{
+    if ([request isKindOfClass:[NSURLRequest class]]) {
+        return (NSURLRequest*)request;
+    }
+    NSMutableURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:request.URL];
+    urlRequest.HTTPMethod = request.HTTPMethod;
+    for (NSString *field in request.allHTTPHeaderFields) {
+        [urlRequest setValue:request.allHTTPHeaderFields[field] forHTTPHeaderField:field];
+    }
+    return urlRequest;
+}
+
 - (BOOL)shouldHandleRequestWithHeaders:(NSDictionary*)requestHeaders
 {
-    return reqestHeaders[self.fetchingHeader] == nil &&
+    return requestHeaders[self.fetchingHeader] == nil &&
             !(self.jsContext[@"self"][@"handlers"][@"fetch"].isUndefined);
 }
 
 - (void)handleFetchEvent:(id<WebRequest>)request complete:(void (^)(NSDictionary *response))complete
 {
     JSValue* fetchHandler = self.jsContext[@"self"][@"handlers"][@"fetch"];
-    JSValue* responsePromise = nil;
-    JSValue* handlerResponse = [fetchHandler callWithArguments:
-                                                @[@{@"request": [self dictFromRequest:request],
-                                                  @"respondWith": ^(JSValue* response) { responsePromise = response; }}]];
+    JSValue* __block responsePromise = nil;
+    [fetchHandler callWithArguments:
+                     @[@{@"request": [self jsRequestFromUrlRequest:[self toNSURLRequest:request]],
+                       @"respondWith": ^(JSValue* response) { responsePromise = response; }}]];
     if (responsePromise == nil) {
         // handler doesn't want to deal with it
         [self forwardRequest:request complete:complete];
@@ -61,11 +74,7 @@ static CDVServiceWorker *instance;
 
 - (void)forwardRequest:(id<WebRequest>)request complete:(void (^)(NSDictionary*response))complete
 {
-    NSURLRequest *urlRequest = [[NSMutableURLRequest alloc] initWithURL:request.URL];
-    urlRequest.HTTPMethod = request.HTTPMethod;
-    for (NSString *field in request.allHTTPHeaderFields) {
-        [urlRequest setValue:request.allHTTPHeaderFields[field] forHTTPHeaderField:field];
-    }
+    NSMutableURLRequest *urlRequest = [[self toNSURLRequest:request] mutableCopy];
     [urlRequest setValue:@"1" forHTTPHeaderField:self.fetchingHeader];
     NSURLSessionTask *task = [[NSURLSession sharedSession]
                                  dataTaskWithRequest:urlRequest
@@ -86,6 +95,16 @@ static CDVServiceWorker *instance;
 }
 
 #pragma mark - Helpers
+
+- (id)jsRequestFromUrlRequest:(NSURLRequest*)request
+{
+    // TODO: include body in the request as well?
+    NSDictionary* headers = request.allHTTPHeaderFields;
+    return @{@"url": request.URL.absoluteString,
+             @"method": request.HTTPMethod,
+             @"headers": [self.jsContext[@"Headers"]
+                             constructWithArguments:@[ headers ? headers : [NSNull null] ]]};
+}
 
 typedef void(^JSPromiseCallback)(JSValue *resolve, JSValue *reject);
 
@@ -121,7 +140,7 @@ typedef void(^JSCallback)(JSValue* val);
             req.HTTPMethod = @"GET";
         }
         if (![requestOrURL[@"headers"] isUndefined]) {
-            NSDictionary *headers = requestOrURL[@"headers"].toDictionary;
+            NSDictionary *headers = requestOrURL[@"headers"][@"vals"].toDictionary;
             for (NSString* key in headers) {
                 [req setValue:headers[key] forHTTPHeaderField:key];
             }
@@ -138,7 +157,7 @@ typedef void(^JSCallback)(JSValue* val);
     if (request == nil) { return nil; }
     // TODO: include body in the request as well?
     NSDictionary* headers = request.allHTTPHeaderFields;
-    return @{@"url": request.URL.standardizedURL,
+    return @{@"url": request.URL.absoluteString,
              @"method": request.HTTPMethod,
              @"headers": headers ? headers : [NSNull null]};
 }
@@ -150,6 +169,7 @@ typedef void(^JSCallback)(JSValue* val);
     NSDictionary* req = [self dictFromRequest:[self requestFromJSValue:requestOrURL]];
     NSDictionary *resp;
     if (req != nil && (resp = self.cache[req]) != nil) {
+        NSLog(@"Cache hit!");
         return [JSValue valueWithObject:resp inContext:self.jsContext];
     } else {
         return [JSValue valueWithUndefinedInContext:self.jsContext];
@@ -165,7 +185,7 @@ typedef void(^JSCallback)(JSValue* val);
 
 - (JSValue*)performFetch:(JSValue*)request {
     return [self wrapInPromise:^(JSCallback onResolve, JSCallback onReject) {
-        NSURLRequest *req = [[self requestFromJSValue:request] mutableCopy];
+        NSMutableURLRequest *req = [[self requestFromJSValue:request] mutableCopy];
         [req setValue:@"1" forHTTPHeaderField:self.fetchingHeader];
         NSURLSessionTask *fetchTask =
         [[NSURLSession sharedSession]

@@ -2,7 +2,7 @@
 #import <Cordova/CDVPlugin.h>
 @import JavaScriptCore;
 
-@protocol WebRequest
+@protocol WebRequest <NSObject>
 
 - (NSURL*)URL;
 - (NSString*)HTTPMethod;
@@ -17,6 +17,6 @@
 // For interoperating with GCDServer
 + (instancetype)sharedInstance;
 - (BOOL)shouldHandleRequestWithHeaders:(NSDictionary*)requestHeaders;
-- (void)handleFetchEvent:(id<WebRequest>)request complete:(void (^)(NSDictionary *response))complete
+- (void)handleFetchEvent:(id<WebRequest>)request complete:(void (^)(NSDictionary *response))complete;
 
 @end

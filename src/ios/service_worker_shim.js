@@ -17,3 +17,6 @@ caches = {
       return cache.match(request);
   }
 };
+
+Headers = function(vals) { this.vals = vals || {}; };
+Headers.prototype.get = function(key) { return this.vals[key]; };
