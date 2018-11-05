@@ -200,7 +200,8 @@ typedef void(^JSCallback)(JSValue* val);
              NSHTTPURLResponse* httpResponse = (NSHTTPURLResponse*)response;
              NSDictionary *jsResp = @{@"headers": httpResponse.allHeaderFields,
                                       @"status": @(httpResponse.statusCode),
-                                      @"body": [data base64EncodedStringWithOptions:0]};
+                                      @"body": [data base64EncodedStringWithOptions:0],
+                                      @"ok": [JSValue valueWithBoolean:(httpResponse.statusCode <= 299) inContext:self.jsContext]};
              onResolve([JSValue valueWithObject:jsResp inContext:self.jsContext]);
          }];
         [fetchTask resume];
