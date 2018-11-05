@@ -20,3 +20,15 @@ caches = {
 
 Headers = function(vals) { this.vals = vals || {}; };
 Headers.prototype.get = function(key) { return this.vals[key]; };
+
+Response = function(status, headers, body) {
+  this.status = status;
+  this.headers = headers;
+  this.body = body;
+};
+Response.prototype.clone = function() {
+  return this;
+};
+Object.defineProperty(Response.prototype, 'ok', {get() {
+  return (this.status >= 200) && (this.status <= 299);
+}});

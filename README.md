@@ -9,5 +9,6 @@ Requirements:
 
 Still a work in progress
 
-Notes: after implementing the integration with GCDWebServer, it seems like the postMessage immediately finishes & sends the message back, but the webview doesn't seem to actual recieve the message & keep going. Something going wrong at some point along the way now?
-Did recently change how the request that gets handed to the fetch handler works, because the headers needs to be an actual Header object, not just a plain Object; did that break something?
+## TODO
+
+Make the cache actually save results locally; currently using an in-memory dictionary for testing

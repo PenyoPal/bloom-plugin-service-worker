@@ -12,7 +12,6 @@
 
 @interface CDVServiceWorker: CDVPlugin
 
-@property (nonatomic,strong) JSContext *jsContext;
 
 // For interoperating with GCDServer
 + (instancetype)sharedInstance;
