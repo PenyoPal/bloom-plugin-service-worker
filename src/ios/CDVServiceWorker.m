@@ -270,8 +270,10 @@ typedef void(^JSCallback)(JSValue* val);
     self.jsContext[@"cache"][@"add"] = ^(JSValue* requestOrURL){
         JSValue *fetchPromise = [welf performFetch:requestOrURL];
         return [fetchPromise invokeMethod:@"then" withArguments:@[^(JSValue *response){
-                    [self setCacheResponse:response forRequest:requestOrURL];
-                }]];
+            if (response[@"ok"].toBool) {
+                [self setCacheResponse:response forRequest:requestOrURL];
+            }
+        }]];
     };
 
 }
