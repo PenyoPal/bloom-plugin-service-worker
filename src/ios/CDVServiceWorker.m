@@ -9,6 +9,7 @@
 @property (nonatomic,strong) NSMutableDictionary<NSURL*, JSValue*>* cache;
 @property (nonatomic,strong) NSURL *rootURL;
 @property (nonatomic,strong) NSString *fetchingHeader;
+@property (nonatomic,strong) NSURL *cacheDirectory;
 
 @end
 
@@ -23,6 +24,13 @@ static CDVServiceWorker *instance;
 - (void)pluginInitialize
 {
     NSLog(@"Initing service worker plugin");
+    self.cacheDirectory = [[[[NSFileManager defaultManager] URLsForDirectory:NSDocumentDirectory
+                                                                   inDomains:NSUserDomainMask]
+                            firstObject] URLByAppendingPathComponent:@"sw_cache"];
+    [[NSFileManager defaultManager] createDirectoryAtURL:self.cacheDirectory
+                             withIntermediateDirectories:YES
+                                              attributes:nil
+                                                   error:nil];
     self.fetchingHeader = @"fake-service-worker-request";
     self.rootURL = [NSURL URLWithString:[NSString stringWithFormat:@"http://localhost:%@",
                                          self.commandDelegate.settings[@"wkport"]]];
@@ -173,11 +181,21 @@ typedef void(^JSCallback)(JSValue* val);
 
 #pragma mark - Caching stuff
 
+- (NSURL*)cachePathForRequest:(NSURLRequest*)request
+{
+    NSString* urlName = [[[request.URL.absoluteString
+                           dataUsingEncoding:NSUTF8StringEncoding]
+                          base64EncodedStringWithOptions:0]
+                         stringByReplacingOccurrencesOfString:@"/" withString:@"_"];
+    return urlName ? [self.cacheDirectory URLByAppendingPathComponent:urlName] : nil;
+}
+
 - (JSValue*)requestFromCache:(JSValue*)requestOrURL {
     NSURLRequest* req = [self requestFromJSValue:requestOrURL];
-    JSValue *resp;
-    if (req != nil && (resp = self.cache[req.URL]) != nil) {
-        return resp;
+    NSURL *cacheURL = [self cachePathForRequest:req];
+    if (cacheURL && [[NSFileManager defaultManager] fileExistsAtPath:cacheURL.path]) {
+        NSDictionary* respDict = [NSDictionary dictionaryWithContentsOfURL:cacheURL];
+        return [JSValue valueWithObject:respDict inContext:self.jsContext];
     } else {
         return [JSValue valueWithUndefinedInContext:self.jsContext];
     }
@@ -186,7 +204,12 @@ typedef void(^JSCallback)(JSValue* val);
 - (void)setCacheResponse:(JSValue*)response forRequest:(JSValue*)requestOrURL
 {
     NSURLRequest* req = [self requestFromJSValue:requestOrURL];
-    self.cache[req.URL] = response;
+    NSError *err = nil;
+    if (![response.toDictionary
+          writeToURL:[self cachePathForRequest:req]
+          error:&err]) {
+        NSLog(@"ERROR WRITING TO CACHE: %@", err.localizedDescription);
+    }
 }
 
 - (JSValue*)performFetch:(JSValue*)request {
