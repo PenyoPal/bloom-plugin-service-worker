@@ -221,7 +221,6 @@ typedef void(^JSCallback)(JSValue* val);
          dataTaskWithRequest:req
          completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
              if (error != nil) {
-                 NSLog(@"Error running fetch for %@: %@", req, error.localizedDescription);
                  onReject([JSValue valueWithObject:error.localizedDescription inContext:self.jsContext]);
                  return;
              }
