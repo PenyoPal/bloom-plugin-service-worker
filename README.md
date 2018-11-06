@@ -53,6 +53,34 @@ To integrate with the webserver, you'll need to have something like the below in
         }
 ```
 
+Also need to add an extension to `GCDWebServerRequest` to make it implement the `CDVServiceWorker`'s `WebRequest` protocol (which is very straightforward).
+
+
+```objc
+//  GCDWebServerRequest+WebRequest.h
+#import "GCDWebServerRequest.h"
+#import "CDVServiceWorker.h"
+
+@interface GCDWebServerRequest (WebRequest) <WebRequest>
+@end
+
+// GCDWebServer+WebRequest.m
+#import "GCDWebServerRequest+WebRequest.h"
+@implementation GCDWebServerRequest (WebRequest)
+
+- (NSString*)HTTPMethod
+{
+    return self.method;
+}
+
+- (NSDictionary*)allHTTPHeaderFields
+{
+    return self.headers;
+}
+
+@end
+```
+
 ## TODO
 
 Make the cache actually save results locally; currently using an in-memory dictionary for testing
