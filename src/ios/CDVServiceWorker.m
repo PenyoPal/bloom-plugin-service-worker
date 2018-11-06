@@ -81,7 +81,13 @@ static CDVServiceWorker *instance;
         };
         [responsePromise invokeMethod:@"then" withArguments:@[^(JSValue *response) {
                     if ([response isInstanceOf:self.jsContext[@"Promise"]]) {
-                        [response invokeMethod:@"then" withArguments:@[handleResponse]];
+                        [[response
+                          invokeMethod:@"then" withArguments:@[handleResponse]]
+                         invokeMethod:@"catch" withArguments:@[^(JSValue *failure) {
+                            complete(@{@"headers": @{},
+                                       @"status": @(500),
+                                       @"body": @""});
+                        }]];
                     } else  {
                         handleResponse(response);
                     }
