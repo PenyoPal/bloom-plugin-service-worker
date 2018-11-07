@@ -341,10 +341,14 @@ typedef void(^JSCallback)(JSValue* val);
         NSMutableArray* handlers = [@[] mutableCopy];
         for (NSNumber *handle in portHandles) {
             [handlers addObject:@{@"postMessage": ^(NSString *msg) {
+                CDVPluginResult* result =
+                [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
+                              messageAsDictionary:@{@"port": handle,
+                                                    @"msg": msg}];
+                result.keepCallback = @(YES);
+                // TODO: need to have a way of indicating with this is done so the callbacks can be freed cordova-side; this is currently leaking memory
                 [self.commandDelegate
-                 sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK
-                                                messageAsDictionary:@{@"port": handle,
-                                                                      @"msg": msg}]
+                 sendPluginResult:result
                  callbackId:command.callbackId];
             }}];
         }
