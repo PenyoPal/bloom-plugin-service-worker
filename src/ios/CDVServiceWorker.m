@@ -211,12 +211,22 @@ typedef void(^JSCallback)(JSValue* val);
 {
     NSURLRequest* req = [self requestFromJSValue:requestOrURL];
     NSError *err = nil;
-    if (![response.toDictionary
-          writeToURL:[self cachePathForRequest:req]
-          error:&err]) {
+    NSOutputStream *stream = [NSOutputStream
+                              outputStreamWithURL:[self cachePathForRequest:req]
+                              append:NO];
+    [stream open];
+    if([NSPropertyListSerialization
+        writePropertyList:response.toDictionary
+        toStream:stream
+        format:NSPropertyListBinaryFormat_v1_0
+        options:0
+        error:&err] == 0) {
         NSLog(@"ERROR WRITING TO CACHE: %@", err.localizedDescription);
     }
+    [stream close];
 }
+
+#pragma mark - "Service Worker" context
 
 - (JSValue*)performFetch:(JSValue*)request {
     return [self wrapInPromise:^(JSCallback onResolve, JSCallback onReject) {
@@ -233,17 +243,14 @@ typedef void(^JSCallback)(JSValue* val);
 
              NSHTTPURLResponse* httpResponse = (NSHTTPURLResponse*)response;
              JSValue *jsResp = [self.jsContext[@"Response"]
-                                   constructWithArguments:@[@(httpResponse.statusCode),
-                                                            httpResponse.allHeaderFields,
-                                                            [data base64EncodedStringWithOptions:0]]];
+                                constructWithArguments:@[@(httpResponse.statusCode),
+                                                         httpResponse.allHeaderFields,
+                                                         [data base64EncodedStringWithOptions:0]]];
              onResolve(jsResp);
          }];
         [fetchTask resume];
     }];
 }
-
-#pragma mark - "Service Worker" context
-
 
 - (void)prepareJavascriptContext
 {
