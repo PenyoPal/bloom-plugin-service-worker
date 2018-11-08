@@ -1,4 +1,0 @@
-%clang
--ObjC
--fblocks
--I/User/james/include/iOS/
