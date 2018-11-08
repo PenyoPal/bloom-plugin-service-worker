@@ -80,7 +80,3 @@ Also need to add an extension to `GCDWebServerRequest` to make it implement the 
 
 @end
 ```
-
-## TODO
-
-Make the cache actually save results locally; currently using an in-memory dictionary for testing
