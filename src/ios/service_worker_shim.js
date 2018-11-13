@@ -11,7 +11,7 @@ cache = {match: null, add: null, put: null};
 
 caches = {
   open: function(_name) {
-      return new Promise(function(resolve, reject) { resolve(cache); });
+      return Promise.resolve(cache);
   },
   match: function(request) {
       return cache.match(request);
