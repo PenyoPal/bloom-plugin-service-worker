@@ -72,24 +72,25 @@ static CDVServiceWorker *instance;
         // handler doesn't want to deal with it
         [self forwardRequest:request complete:complete];
     } else {
-        void (^handleResponse)(JSValue *response) = ^(JSValue *response) {
+        JSValue* (^handleResponse)(JSValue *response) = ^JSValue*(JSValue *response) {
             NSDictionary *respDict = response.toDictionary;
             complete(@{@"headers": respDict[@"headers"],
                        @"status": respDict[@"status"],
                        @"body": [[NSData alloc] initWithBase64EncodedString:respDict[@"body"]
                                                                     options:0]});
+            return [self.jsContext[@"Promise"] invokeMethod:@"resolve" withArguments:@[response]];
         };
-        [responsePromise invokeMethod:@"then" withArguments:@[^(JSValue *response) {
+        [responsePromise invokeMethod:@"then" withArguments:@[^JSValue* (JSValue *response) {
                     if ([response isInstanceOf:self.jsContext[@"Promise"]]) {
-                        [[response
-                          invokeMethod:@"then" withArguments:@[handleResponse]]
-                         invokeMethod:@"catch" withArguments:@[^(JSValue *failure) {
+                        return [[response
+                                 invokeMethod:@"then" withArguments:@[handleResponse]]
+                                invokeMethod:@"catch" withArguments:@[^(JSValue *failure) {
                             complete(@{@"headers": @{},
                                        @"status": @(500),
                                        @"body": @""});
                         }]];
                     } else  {
-                        handleResponse(response);
+                        return handleResponse(response);
                     }
                 }]];
     }
@@ -280,11 +281,16 @@ typedef void(^JSCallback)(JSValue* val);
         [self setCacheResponse:response forRequest:requestOrURL];
     };
 
-    self.jsContext[@"cache"][@"add"] = ^(JSValue* requestOrURL){
-        JSValue *fetchPromise = [welf performFetch:requestOrURL];
-        return [fetchPromise invokeMethod:@"then" withArguments:@[^(JSValue *response){
+    self.jsContext[@"cache"][@"add"] = ^JSValue* (JSValue* requestOrURL){
+        JSValue *fetchPromise = [self performFetch:requestOrURL];
+        return [fetchPromise invokeMethod:@"then" withArguments:@[^JSValue*(JSValue *response){
             if (response[@"ok"].toBool) {
                 [self setCacheResponse:response forRequest:requestOrURL];
+                return [self.jsContext[@"Promise"] invokeMethod:@"resolve"
+                                                  withArguments:@[response]];
+            } else {
+                return [self.jsContext[@"Promise"] invokeMethod:@"reject"
+                                                  withArguments:@[[JSValue valueWithUndefinedInContext:self.jsContext]]];
             }
         }]];
     };
