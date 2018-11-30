@@ -111,8 +111,11 @@ static CDVServiceWorker *instance;
                 return;
             }
             NSHTTPURLResponse *resp = (NSHTTPURLResponse *)response;
+            NSMutableDictionary* headers = [resp.allHeaderFields mutableCopy];
+            headers[@"Content-Encoding"] = @"identity";
+            headers[@"Content-Length"] = [NSString stringWithFormat:@"%lu", (unsigned long)data.length];
             complete(@{@"status": @(resp.statusCode),
-                       @"headers": resp.allHeaderFields,
+                       @"headers": headers,
                        @"body": data});
         }];
     [task resume];
@@ -243,9 +246,12 @@ typedef void(^JSCallback)(JSValue* val);
              }
 
              NSHTTPURLResponse* httpResponse = (NSHTTPURLResponse*)response;
+             NSMutableDictionary* headers = [httpResponse.allHeaderFields mutableCopy];
+             headers[@"Content-Encoding"] = @"identity";
+             headers[@"Content-Length"] = [NSString stringWithFormat:@"%lu", (unsigned long)data.length];
              JSValue *jsResp = [self.jsContext[@"Response"]
                                 constructWithArguments:@[@(httpResponse.statusCode),
-                                                         httpResponse.allHeaderFields,
+                                                         headers,
                                                          [data base64EncodedStringWithOptions:0]]];
              onResolve(jsResp);
          }];
